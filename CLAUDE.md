@@ -25,23 +25,24 @@ cd modern/web && npm run dev           # :5173
 
 - 의존성 설치는 `npm ci` 만 쓴다. `npm install` 은 `package-lock.json` 을 바꾼다.
 - `modern/api` 를 고쳤으면 `./gradlew test`, `modern/web` 을 고쳤으면 검증 3종을 실행하고 통과 · 실패 수를 답변에 적는다. 실행하지 않았으면 "실행하지 않음"이라고 쓴다. 하나라도 실패하면 "완료"라고 쓰지 않는다.
+- 테스트 결과는 통과 · 실패 수와 실패한 테스트 이름만 답변에 적는다. 전체 로그를 붙이지 않는다.
 - 테스트는 실제 MariaDB 나 `localhost:8080` 에 붙지 않는다.
 
 ## 2. 코딩 컨벤션
 
 ### modern/api (`com.example`, Spring Boot 3.3 · Java 21)
 - 패키지는 도메인 단위(`item/`, `assignment/`) + `common/`, `config/`. 호출 순서는 Controller → Service → Repository → 엔티티.
-- 컨트롤러 생성자에 `*Repository` 타입을 주입하지 않고, 컨트롤러에 SQL 문자열이 없다.
 - 서비스는 다른 도메인 패키지의 `*Repository` 를 주입하지 않는다. 필요하면 그 도메인의 Service 를 주입한다.
 - 컨트롤러 메서드는 엔티티 타입을 반환하지 않는다. 응답은 record DTO(`ItemResponse` 등)로 낸다.
-- 예외 → HTTP 변환은 `common/GlobalExceptionHandler` 에서만 한다. 컨트롤러 메서드 안에 try-catch 가 없다. 없는 리소스는 `NotFoundException`(404).
-- `catch` 블록은 비어 있지 않고, 로그를 남긴 뒤 다시 던지거나 다른 예외로 감싸 던진다.
-- 로그는 SLF4J(`org.slf4j.Logger`)로만 남긴다. `System.out` · `System.err` · `printStackTrace()` 가 없다.
+- 예외 → HTTP 변환은 `common/GlobalExceptionHandler` 에서만 한다. 컨트롤러 메서드 안에 try-catch 가 없다.
+- 상태 코드: `NotFoundException` 404, 요청 값 검증 실패(`IllegalArgumentException`, `MethodArgumentNotValidException` 등) 400, `IllegalStateException` 409, 그 밖의 예외 500.
+- 로그 레벨: 404 · 400 은 `INFO`, 409 는 `WARN`, 500 은 `ERROR`.
 - 로그 인자에 학생 식별자(`STU-…`) · 이메일 · 토큰 값을 넣지 않는다.
 - `item/` · `assignment/` 에서 현재 시각은 주입받은 `Clock`(`common/ClockConfig`)으로 구한다. `now()` 를 인자 없이 호출하지 않는다.
 - `@Transactional` 메서드 안에서 외부 HTTP 를 호출하지 않는다.
 - 새 public 서비스 메서드 · 새 엔드포인트마다 테스트 1개 이상. 컨트롤러는 `@WebMvcTest`, 서비스는 Mockito, 리포지토리 쿼리는 `@DataJpaTest`, 모두 `@ActiveProfiles("test")`.
 - 테스트 메서드명은 camelCase, `@DisplayName` 에 한국어 설명을 붙인다.
+- 0 · 1 이 아닌 숫자 리터럴은 `static final` 상수로 뺀다(예: `SIGNATURE_ROUNDS`).
 - 상수는 `UPPER_SNAKE_CASE`, 와일드카드 import 금지, 들여쓰기 4칸, 한 줄 120자 이내.
 - 새 엔드포인트는 `/api/<도메인 복수형>` 아래에 둔다.
 
@@ -50,18 +51,22 @@ cd modern/web && npm run dev           # :5173
 - 엔드포인트 함수는 `src/api/items.ts`, 응답 타입은 `src/api/types.ts` 에 두고 필드명은 백엔드 JSON 과 같게 쓴다.
 - 조회 훅은 `src/hooks/use<이름>.ts` 에 두고 `useApiQuery` 를 호출해 `QueryState` 를 반환한다.
 - 컴포넌트는 `QueryState.status` 로 분기하고 HTTP 상태 코드를 직접 비교하지 않는다(오류 문구 변환은 `toErrorMessage`).
-- 함수 컴포넌트만 쓴다. 클래스 컴포넌트 · `React.FC` · `defaultProps` 를 쓰지 않는다.
+- 조회 결과는 `AsyncSection` 으로 loading · error 를 분기하고, 목록이 비면(`length === 0`) 빈 결과 문구를 따로 표시한다.
+- 함수 컴포넌트만 쓴다. 클래스 컴포넌트 · `React.FC` · `defaultProps` 를 쓰지 않는다. props 타입은 `interface <이름>Props` 로 선언한다.
 - 한 파일은 컴포넌트 하나를 export 하고 200줄을 넘지 않는다.
 - `any`, `as unknown as`, `@ts-ignore`, `dangerouslySetInnerHTML` 을 쓰지 않는다. `console.log` 를 남기지 않는다.
 - `eslint-disable` 주석에는 같은 줄에 사유를 적는다.
 - 이벤트 prop 은 `on<동작>`, 구현 함수는 `handle<동작>`.
-- 새 컴포넌트마다 `<이름>.test.tsx` 를 만든다. fetch 는 `src/test/mockFetch.ts` · `fixtures.ts` 로 가로채고, 조회는 `getByRole` · `getByLabelText` 를 먼저 쓴다. 스냅샷 테스트는 만들지 않는다.
+- 새 컴포넌트마다 `<이름>.test.tsx` 를 만들고, 렌더 확인 1개와 클릭 · 입력 상호작용 1개 이상을 넣는다. fetch 는 `src/test/mockFetch.ts` · `fixtures.ts` 로 가로채고, 조회는 `getByRole` · `getByLabelText` 를 먼저 쓴다. 스냅샷 테스트는 만들지 않는다.
 
 ## 3. 금지 사항
 
+### 우리 팀 규칙
+- 컨트롤러에서 Repository 를 직접 호출하지 않는다: 컨트롤러 생성자에 `*Repository` 타입이 없고, 컨트롤러에 SQL 문자열이 없다.
+- 예외를 삼키지 않는다: `catch` 블록은 비어 있지 않고, 로그를 남긴 뒤 다시 던지거나 다른 예외로 감싸 던진다. 로그는 SLF4J(`org.slf4j.Logger`)로만 남기고 `System.out` · `System.err` · `printStackTrace()` 가 없다.
+- 의존성 추가와 DB 스키마 변경은 먼저 묻는다: `build.gradle` 의 `plugins` · `dependencies`, `package.json` 의 `dependencies` · `devDependencies` 변경(이유와 대안을 함께 적는다), DB 스키마 · 시드(`db/`) 변경, 마이그레이션 파일 추가.
+
 ### 먼저 묻는다
-- DB 스키마 · 시드(`db/`) 변경, 마이그레이션 파일 추가.
-- 의존성 추가 · 업그레이드: `build.gradle` 의 `plugins` · `dependencies`, `package.json` 의 `dependencies` · `devDependencies`. 이유와 대안을 함께 적는다.
 - `application.yml` 의 DB 접속 · Hikari 풀 설정(최대 5, 대기 3초 — 운영 값과 같음) 변경.
 
 ### 하지 않는다
@@ -72,7 +77,7 @@ cd modern/web && npm run dev           # :5173
 - `templates/` 는 참고용이다. 템플릿과 코드가 다르면 코드를 사실로 본다.
 - 루트 `.env` 를 만들지 않는다(권한 실습 더미는 `.env.perm-test`).
 
-### 팀 규칙 (`templates/CLAUDE.iac.md` 에서 옮김)
+### 비밀값 · 인프라 (`templates/CLAUDE.iac.md` 에서 옮김)
 - 비밀값(운영 계정 · 비밀번호 · API 키 · 토큰 · 인증서)을 코드 리터럴 · 설정 파일 · 변수 기본값에 넣지 않는다. 예외: 실습 더미 `app-pass`, `readonly-pass`, `Readonly-pass1`.
 - `.env`, `.env.*`(`.env.perm-test` 제외), `*.pem`, `~/.aws/`, `~/.ssh/` 를 읽지 않는다.
 - 운영 DB 호스트(`prod-db` 등) · 운영 계정 프로필(`AWS_PROFILE=prod`)을 명령 · 설정에 쓰지 않는다. 실제 AWS 계정에 접속하지 않는다.
