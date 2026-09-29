@@ -116,3 +116,10 @@ modern/web/src/
 - 레거시 규칙을 옮길 때는 근거를 `파일:줄번호` 로 적는다(예: `legacy/item-bank-php/search.php:214`).
 - 도메인 용어: 문항 `item` · 단원 `unit`(예: `M5-1`) · 난이도 `level`(1~5) · 태그 `tag` · 학급 `class` · 과제 `assignment` · 배포 `distribution` · 제출 `submission` · 학생 `STU-<숫자>`.
 - Hook 은 `.claude/settings.json` 에 `bash "$CLAUDE_PROJECT_DIR"/scripts/hook-node.sh hooks/<스크립트>.mjs` 형태로 등록한다.
+
+## 5. 완료 기준
+
+- 이관 · 리팩토링 작업은 `characterization/` 의 `npm test` 가 전부 통과하기 전에는 "완료"라고 보고하지 않는다.
+- 테스트가 실패하면 실패한 케이스와 차이를 그대로 보고한다. "거의 됐다"처럼 요약해 말하지 않는다.
+- 테스트를 통과시키려고 `characterization/` 의 테스트 코드나 스냅샷 파일을 고치지 않는다. 스냅샷을 바꿔야 한다고 판단되면 멈추고 묻는다.
+- 레거시 동작이 버그로 보여도 이관 중에는 고치지 않는다. "의심 동작" 목록으로 따로 보고한다.
