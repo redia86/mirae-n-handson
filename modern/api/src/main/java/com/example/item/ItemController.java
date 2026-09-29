@@ -1,5 +1,6 @@
 package com.example.item;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,9 +15,21 @@ import org.springframework.web.bind.annotation.RestController;
 public class ItemController {
 
     private final ItemService itemService;
+    private final ItemSearchService itemSearchService;
 
-    public ItemController(ItemService itemService) {
+    public ItemController(ItemService itemService, ItemSearchService itemSearchService) {
         this.itemService = itemService;
+        this.itemSearchService = itemSearchService;
+    }
+
+    /**
+     * {@code GET /api/items/search} — 문항 검색(레거시 {@code search.php}). 파라미터 이름은 레거시와 같다:
+     * {@code q, unit, level, tag, sort, dir, page}. 쿼리 문자열은 레거시(PHP)와 같은 방식으로 푼다.
+     */
+    @GetMapping("/items/search")
+    public ItemSearchResponse searchItems(HttpServletRequest request) {
+        ItemSearchParams params = ItemSearchParams.parse(request.getQueryString());
+        return itemSearchService.search(ItemSearchCondition.from(params));
     }
 
     /** {@code GET /api/items/{id}} — 문항 단건. */

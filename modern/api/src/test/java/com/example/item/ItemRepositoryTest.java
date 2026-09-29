@@ -11,6 +11,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 
 /** 저장소 슬라이스 — H2(MariaDB 모드)에 실제 SQL 을 날린다. */
@@ -79,5 +81,56 @@ class ItemRepositoryTest {
         assertThat(itemRepository.countByUnitIdAndStatus(fraction.getId(), ItemStatus.ACTIVE)).isEqualTo(3);
         assertThat(itemRepository.countByUnitIdAndStatus(fraction.getId(), ItemStatus.DELETED)).isEqualTo(1);
         assertThat(unitRepository.findByCode("M5-3")).isPresent();
+    }
+
+    @Test
+    @DisplayName("검색 Specification: 조건 없음은 공개 · 난이도 5 미만만, level DESC · id ASC")
+    void searchWithoutConditionExcludesLevelFive() {
+        Page<Item> page = search("");
+
+        assertThat(page.getContent()).extracting(Item::getTitle)
+            .containsExactly("분수 문장제", "분모가 같은 분수의 덧셈", "소수 곱셈");
+        assertThat(page.getTotalElements()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("검색 Specification: 키워드 · 단원 · 난이도 · 태그를 AND 로 잇는다")
+    void searchCombinesConditionsWithAnd() {
+        assertThat(search("tag=%EB%AC%B8%EC%9E%A5%EC%A0%9C&level=5").getContent())
+            .extracting(Item::getTitle).containsExactly("난이도 5 분수");
+        assertThat(search("q=%EB%AC%B8%EC%9E%A5%EC%A0%9C&unit=M5-1").getContent())
+            .extracting(Item::getTitle).containsExactly("분수 문장제");
+        assertThat(search("unit=X9-99").getTotalElements()).isZero();
+        assertThat(search("level=-1").getTotalElements()).isZero();
+        assertThat(search("tag=%EC%97%86%EB%8A%94%ED%83%9C%EA%B7%B8").getTotalElements()).isZero();
+    }
+
+    @Test
+    @DisplayName("검색 Specification: 단원 내림차순 정렬은 2차로 난이도 내림차순, 범위 밖 페이지는 빈 목록과 총 건수")
+    void searchSortsByUnitAndPagesBeyondEnd() {
+        assertThat(search("sort=unit&dir=desc").getContent()).extracting(Item::getTitle)
+            .containsExactly("소수 곱셈", "분수 문장제", "분모가 같은 분수의 덧셈");
+
+        Page<Item> beyond = search("page=2");
+        assertThat(beyond.getContent()).isEmpty();
+        assertThat(beyond.getTotalElements()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("findWithDetailsByIdIn: 여러 건의 단원 · 태그를 한 번에 로드한다")
+    void findWithDetailsByIdInLoadsTags() {
+        List<Integer> ids = search("").getContent().stream().map(Item::getId).toList();
+        entityManager.clear();
+
+        List<Item> items = itemRepository.findWithDetailsByIdIn(ids);
+
+        assertThat(items).hasSize(ids.size());
+        assertThat(items).allSatisfy(item -> assertThat(Hibernate.isInitialized(item.getTags())).isTrue());
+    }
+
+    private Page<Item> search(String rawQuery) {
+        ItemSearchCondition condition = ItemSearchCondition.from(ItemSearchParams.parse(rawQuery));
+        PageRequest pageRequest = PageRequest.of(condition.page() - 1, ItemSearchService.PAGE_SIZE, condition.sort());
+        return itemRepository.findAll(ItemSearchSpecifications.matching(condition), pageRequest);
     }
 }

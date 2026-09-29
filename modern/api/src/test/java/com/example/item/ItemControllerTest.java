@@ -1,5 +1,8 @@
 package com.example.item;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -9,6 +12,7 @@ import com.example.common.NotFoundException;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -26,6 +30,9 @@ class ItemControllerTest {
 
     @MockBean
     private ItemService itemService;
+
+    @MockBean
+    private ItemSearchService itemSearchService;
 
     @Test
     @DisplayName("GET /api/items/{id} → 200, 문항 JSON")
@@ -74,5 +81,39 @@ class ItemControllerTest {
             .andExpect(jsonPath("$.length()").value(2))
             .andExpect(jsonPath("$[0].id").value(2))
             .andExpect(jsonPath("$[1].tags[0]").value("계산"));
+    }
+
+    @Test
+    @DisplayName("GET /api/items/search → 200, rows · count · message 만 담은 JSON")
+    void searchItemsReturnsNormalizedShape() throws Exception {
+        when(itemSearchService.search(any())).thenReturn(new ItemSearchResponse(
+            List.of(new ItemSearchRow(16, "백분율 구하기", "M6-2", 3, List.of("문장제"))), 1, null));
+
+        mockMvc.perform(get("/api/items/search").param("tag", "문장제").accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.count").value(1))
+            .andExpect(jsonPath("$.message").isEmpty())
+            .andExpect(jsonPath("$.rows[0].id").value(16))
+            .andExpect(jsonPath("$.rows[0].unit").value("M6-2"))
+            .andExpect(jsonPath("$.rows[0].tags[0]").value("문장제"))
+            .andExpect(jsonPath("$.rows[0].stem").doesNotExist())
+            .andExpect(jsonPath("$.rows[0].status").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("GET /api/items/search 없는 단원 · 범위 밖 난이도 → 404 가 아니라 200, 레거시 방식으로 조건을 푼다")
+    void searchItemsParsesLegacyParams() throws Exception {
+        when(itemSearchService.search(any())).thenReturn(new ItemSearchResponse(List.of(), 0, "검색 결과가 없습니다"));
+        ArgumentCaptor<ItemSearchCondition> condition = ArgumentCaptor.forClass(ItemSearchCondition.class);
+
+        mockMvc.perform(get("/api/items/search?unit=X9-99&level=-1&level=9&page=0"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.count").value(0))
+            .andExpect(jsonPath("$.message").value("검색 결과가 없습니다"));
+
+        verify(itemSearchService).search(condition.capture());
+        assertThat(condition.getValue().unitCode()).isEqualTo("X9-99");
+        assertThat(condition.getValue().level()).isEqualTo(9L);
+        assertThat(condition.getValue().page()).isEqualTo(1);
     }
 }
