@@ -45,7 +45,12 @@ public class ItemSearchService {
             ? Map.of()
             : itemRepository.findWithDetailsByIdIn(ids).stream()
                 .collect(Collectors.toMap(Item::getId, Function.identity()));
-        List<ItemSearchRow> rows = ids.stream().map(id -> ItemSearchRow.from(details.get(id))).toList();
+        // 두 조회 사이에 지워지거나 비공개로 바뀐 문항은 뺀다(레거시는 행 조회 1개, search.php:521-525)
+        List<ItemSearchRow> rows = ids.stream()
+            .map(details::get)
+            .filter(item -> item != null && ItemStatus.ACTIVE.equals(item.getStatus()))
+            .map(ItemSearchRow::from)
+            .toList();
 
         long total = page.getTotalElements();
         log.debug("item search page {} returned {} of {} items", condition.page(), rows.size(), total);
