@@ -21,6 +21,8 @@ import java.util.regex.Pattern;
 final class ItemSearchParams {
 
     private static final int HEX_RADIX = 16;
+    /** {@code %} 뒤에 오는 16진수 자리 수. */
+    private static final int PERCENT_HEX_DIGITS = 2;
     private static final String PHP_ARRAY_TO_STRING = "Array";
     /** PHP 가 정수 키로 바꾸는 배열 키(long 범위 안의 10진수). */
     private static final Pattern INT_KEY = Pattern.compile("0|[1-9][0-9]{0,17}");
@@ -90,11 +92,12 @@ final class ItemSearchParams {
             byte b = bytes[i];
             if (b == '+') {
                 out.write(' ');
-            } else if (b == '%' && i + 2 < bytes.length && isHex(bytes[i + 1]) && isHex(bytes[i + 2])) {
+            } else if (b == '%' && i + PERCENT_HEX_DIGITS < bytes.length
+                    && isHex(bytes[i + 1]) && isHex(bytes[i + PERCENT_HEX_DIGITS])) {
                 int high = Character.digit(bytes[i + 1], HEX_RADIX);
-                int low = Character.digit(bytes[i + 2], HEX_RADIX);
+                int low = Character.digit(bytes[i + PERCENT_HEX_DIGITS], HEX_RADIX);
                 out.write(high * HEX_RADIX + low);
-                i += 2;
+                i += PERCENT_HEX_DIGITS;
             } else {
                 out.write(b);
             }
